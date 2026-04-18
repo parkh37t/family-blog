@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>게시글 · 우리 가족 블로그</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="nav"></header>
+  <main id="main" class="article"></main>
+
+  <script type="module">
+    import { api, me, renderNav, renderFooter, formatDateTime, formatDate, escapeHtml, initialOf, lightbox, toast, confirmDialog } from '/js/common.js';
+
+    const user = await me();
+    renderNav('', user);
+
+    const id = Number(new URLSearchParams(location.search).get('id') || location.pathname.split('/').pop());
+    const main = document.getElementById('main');
+
+    async function load() {
+      main.innerHTML = '<div class="spinner"></div>';
+      try {
+        const { post } = await api('/api/posts/' + id);
+        render(post);
+      } catch (e) {
+        main.innerHTML = `<div class="empty"><p>${escapeHtml(e.message)}</p><a class="btn mt-2" href="/">홈으로</a></div>`;
+      }
+    }
+
+    function render(p) {
+      const canEdit = user && (user.id === p.user_id || user.role === 'admin');
+      main.innerHTML = `
+        <div class="article-header">
+          <div class="row" style="gap:10px;margin-bottom:10px">
+            <span class="chip active" style="cursor:default">${escapeHtml(p.category || '일상')}</span>
+            <span class="muted" style="font-size:13px">조회 ${p.views}</span>
+          </div>
+          <h1>${escapeHtml(p.title)}</h1>
+          <div class="article-meta">
+            <span class="avatar">${p.user_avatar ? `<img src="${escapeHtml(p.user_avatar)}">` : escapeHtml(initialOf(p.display_name))}</span>
+            <div>
+              <div style="font-weight:600;color:var(--ink)">${escapeHtml(p.display_name)}</div>
+              <div style="font-size:12px;color:var(--ink-muted)">${formatDateTime(p.created_at)}</div>
+            </div>
+            ${canEdit ? `
+              <div style="margin-left:auto;display:flex;gap:6px">
+                <a class="btn btn-sm btn-ghost" href="/write?id=${p.id}">수정</a>
+                <button class="btn btn-sm btn-danger" id="del">삭제</button>
+              </div>` : ''}
+          </div>
+        </div>
+
+        ${p.images && p.images.length ? `
+          <div class="article-gallery">
+            ${p.images.map(img => `
+              <figure data-src="/uploads/${escapeHtml(img.filename)}">
+                <img src="/uploads/${escapeHtml(img.filename)}" alt="${escapeHtml(img.caption || '')}" loading="lazy">
+              </figure>
+            `).join('')}
+          </div>` : ''}
+
+        ${p.content ? `<div class="article-body">${escapeHtml(p.content)}</div>` : ''}
+
+        <div class="row mt-2" style="gap:8px;padding-top:20px;border-top:1px solid var(--line);margin-top:32px">
+          <button class="btn btn-sm" id="like">♡ 좋아요 ${p.likes || 0}</button>
+          <a class="btn btn-sm btn-ghost" href="/">목록</a>
+        </div>
+
+        <section class="comments">
+          <h3>댓글 ${p.comments?.length || 0}</h3>
+          <div id="cList">
+            ${(p.comments || []).map(c => commentHTML(c)).join('') || '<p class="muted" style="font-size:14px">아직 댓글이 없습니다.</p>'}
+          </div>
+          ${user ? `
+            <form id="cForm" class="form" style="margin-top:20px">
+              <textarea class="textarea" id="cText" placeholder="${escapeHtml(user.display_name)}님의 따뜻한 말 한마디..." required minlength="1" style="min-height:80px"></textarea>
+              <div style="align-self:flex-end"><button class="btn btn-primary btn-sm" type="submit">등록</button></div>
+            </form>
+          ` : `<p class="muted mt-2" style="font-size:14px">댓글을 남기려면 <a href="/login">로그인</a>이 필요합니다.</p>`}
+        </section>
+      `;
+
+      main.querySelectorAll('.article-gallery figure').forEach(f => {
+        f.onclick = () => lightbox(f.dataset.src);
+      });
+
+      const likeBtn = main.querySelector('#like');
+      if (likeBtn) likeBtn.onclick = async () => {
+        if (!user) return (location.href = '/login');
+        const { likes } = await api(`/api/posts/${p.id}/like`, { method: 'POST' });
+        likeBtn.textContent = `♡ 좋아요 ${likes}`;
+      };
+
+      const delBtn = main.querySelector('#del');
+      if (delBtn) delBtn.onclick = async () => {
+        if (!(await confirmDialog('게시글을 삭제하시겠습니까?'))) return;
+        await api(`/api/posts/${p.id}`, { method: 'DELETE' });
+        toast('삭제되었습니다');
+        setTimeout(() => location.href = '/', 600);
+      };
+
+      const cForm = main.querySelector('#cForm');
+      if (cForm) cForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const content = main.querySelector('#cText').value.trim();
+        if (!content) return;
+        await api(`/api/posts/${p.id}/comments`, { method: 'POST', body: { content } });
+        load();
+      };
+
+      main.querySelectorAll('[data-del-comment]').forEach(b => {
+        b.onclick = async () => {
+          if (!(await confirmDialog('댓글을 삭제할까요?'))) return;
+          await api(`/api/posts/comments/${b.dataset.delComment}`, { method: 'DELETE' });
+          load();
+        };
+      });
+    }
+
+    function commentHTML(c) {
+      const canDel = user && (user.id === c.user_id || user.role === 'admin');
+      return `
+        <div class="comment">
+          <span class="avatar">${c.avatar ? `<img src="${escapeHtml(c.avatar)}">` : escapeHtml(initialOf(c.display_name))}</span>
+          <div class="comment-body">
+            <div class="comment-head">
+              <span class="comment-name">${escapeHtml(c.display_name)}</span>
+              <span class="comment-date">${formatDate(c.created_at)}${canDel ? ` · <button class="btn btn-sm btn-ghost" style="padding:0 6px;height:auto;border:none;background:transparent;color:var(--ink-muted);font-size:12px" data-del-comment="${c.id}">삭제</button>` : ''}</span>
+            </div>
+            <div class="comment-text">${escapeHtml(c.content)}</div>
+          </div>
+        </div>`;
+    }
+
+    renderFooter();
+    load();
+  </script>
+</body>
+</html>

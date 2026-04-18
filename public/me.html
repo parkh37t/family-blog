@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>내 프로필 · 우리 가족 블로그</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="nav"></header>
+  <main class="container" style="max-width:620px;padding:40px 20px">
+    <h1 class="serif" style="font-size:30px;margin:0 0 8px">내 프로필</h1>
+    <p class="muted mb-3">프로필을 관리하고 비밀번호를 변경할 수 있어요.</p>
+
+    <div class="card">
+      <form id="form" class="form">
+        <div class="field"><label>아이디</label><input class="input" id="username" disabled></div>
+        <div class="field"><label>표시 이름</label><input class="input" id="display_name" required></div>
+        <div class="field"><label>프로필 사진 URL</label><input class="input" id="avatar" placeholder="/uploads/xxxx.jpg"></div>
+        <div class="field"><label>소개</label><textarea class="textarea" id="bio" style="min-height:80px"></textarea></div>
+        <div class="field"><label>새 비밀번호 (변경 시에만)</label><input type="password" class="input" id="password" minlength="6"></div>
+
+        <div class="row-between mt-2">
+          <button type="button" class="btn btn-ghost" id="logout">로그아웃</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card mt-2">
+      <h2>사진 업로드 (프로필용)</h2>
+      <label class="uploader">
+        <div class="uploader-icon">🖼</div>
+        <p>파일을 선택하면 URL이 위 입력란에 자동 입력됩니다.</p>
+        <input type="file" id="avFile" accept="image/*">
+      </label>
+    </div>
+  </main>
+
+  <script type="module">
+    import { api, me, renderNav, renderFooter, toast } from '/js/common.js';
+    const user = await me();
+    if (!user) { location.href = '/login?next=/me'; throw 0; }
+    renderNav('', user);
+    renderFooter();
+
+    document.getElementById('username').value = user.username;
+    document.getElementById('display_name').value = user.display_name || '';
+    document.getElementById('avatar').value = user.avatar || '';
+
+    const meFull = await api('/api/auth/me');
+    // bio not in minimal user; fetch profile
+    try {
+      const { users } = await api('/api/users');
+      const found = users.find(u => u.id === user.id);
+      if (found) document.getElementById('bio').value = found.bio || '';
+    } catch {}
+
+    document.getElementById('avFile').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('files', file);
+      try {
+        const { files } = await api('/api/uploads', { method: 'POST', body: fd });
+        document.getElementById('avatar').value = files[0].url;
+        toast('업로드되었습니다');
+      } catch (err) { toast(err.message, 'err'); }
+    });
+
+    document.getElementById('form').onsubmit = async (e) => {
+      e.preventDefault();
+      const body = {
+        display_name: document.getElementById('display_name').value.trim(),
+        avatar: document.getElementById('avatar').value.trim() || null,
+        bio: document.getElementById('bio').value,
+      };
+      const pw = document.getElementById('password').value;
+      if (pw) body.password = pw;
+      try {
+        await api('/api/auth/me', { method: 'PUT', body });
+        toast('저장되었습니다');
+        setTimeout(() => location.reload(), 600);
+      } catch (err) { toast(err.message, 'err'); }
+    };
+
+    document.getElementById('logout').onclick = async () => {
+      await api('/api/auth/logout', { method: 'POST' });
+      location.href = '/';
+    };
+  </script>
+</body>
+</html>

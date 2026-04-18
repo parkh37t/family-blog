@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>가입하기 · 우리 가족 블로그</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="auth-wrap">
+    <div class="auth-card">
+      <a href="/" class="brand" style="justify-content:center;margin-bottom:20px"><span class="brand-mark">家</span><span>우리 가족</span></a>
+      <h1>가족으로 함께</h1>
+      <p class="sub">관리자로부터 받은 초대코드로 가입해 주세요.</p>
+
+      <form id="form" class="form">
+        <div class="field">
+          <label for="invite_code">초대코드</label>
+          <input id="invite_code" class="input" required placeholder="예: A1B2C3D4">
+        </div>
+        <div class="field">
+          <label for="username">아이디</label>
+          <input id="username" class="input" required autocomplete="username" minlength="3" maxlength="30">
+          <span class="hint">영문/숫자 3~30자</span>
+        </div>
+        <div class="field">
+          <label for="display_name">표시 이름</label>
+          <input id="display_name" class="input" required placeholder="예: 아빠, 엄마, 큰딸" maxlength="30">
+        </div>
+        <div class="field">
+          <label for="password">비밀번호</label>
+          <input id="password" type="password" class="input" required autocomplete="new-password" minlength="6">
+          <span class="hint">6자 이상</span>
+        </div>
+        <button class="btn btn-primary btn-lg btn-block" type="submit">가입 완료</button>
+      </form>
+
+      <p class="swap">이미 계정이 있으신가요? <a href="/login">로그인</a></p>
+    </div>
+  </main>
+
+  <script type="module">
+    import { api, toast } from '/js/common.js';
+
+    const params = new URLSearchParams(location.search);
+    if (params.get('code')) document.getElementById('invite_code').value = params.get('code');
+
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button');
+      btn.disabled = true;
+      try {
+        await api('/api/auth/register', {
+          method: 'POST',
+          body: {
+            invite_code: document.getElementById('invite_code').value.trim().toUpperCase(),
+            username: document.getElementById('username').value.trim(),
+            display_name: document.getElementById('display_name').value.trim(),
+            password: document.getElementById('password').value,
+          },
+        });
+        toast('가족이 되신 것을 환영해요!');
+        setTimeout(() => location.href = '/', 600);
+      } catch (err) {
+        toast(err.message, 'err');
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

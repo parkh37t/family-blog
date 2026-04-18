@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>사진 모음 · 우리 가족 블로그</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 4px;
+    }
+    @media (min-width: 640px) { .photo-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; } }
+    @media (min-width: 1000px) { .photo-grid { grid-template-columns: repeat(4, 1fr); } }
+    .photo-tile {
+      aspect-ratio: 1;
+      overflow: hidden;
+      position: relative;
+      cursor: pointer;
+      background: var(--bg-muted);
+    }
+    .photo-tile img { width:100%; height:100%; object-fit:cover; transition: transform 0.3s; }
+    .photo-tile:hover img { transform: scale(1.05); }
+    .photo-tile .caption {
+      position: absolute; inset: auto 0 0 0;
+      padding: 18px 12px 10px;
+      background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
+      color: #fff;
+      font-size: 12px;
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .photo-tile:hover .caption { opacity: 1; }
+  </style>
+</head>
+<body>
+  <header class="nav"></header>
+
+  <div class="hero-shell">
+    <section class="hero">
+      <span class="hero-kicker">gallery</span>
+      <h1>사진으로 보는 우리</h1>
+      <p>함께 찍은 한 장 한 장이 우리의 이야기입니다.</p>
+    </section>
+  </div>
+
+  <main class="container" style="padding-bottom:60px">
+    <div id="grid" class="photo-grid"></div>
+    <div id="status"></div>
+  </main>
+
+  <script type="module">
+    import { api, me, renderNav, renderFooter, lightbox, escapeHtml } from '/js/common.js';
+    const user = await me();
+    renderNav('gallery', user);
+    renderFooter();
+
+    async function load() {
+      const status = document.getElementById('status');
+      status.innerHTML = '<div class="spinner"></div>';
+      const { posts } = await api('/api/posts?limit=500');
+      status.innerHTML = '';
+      const photos = [];
+      for (const p of posts) {
+        for (const img of (p.images || [])) {
+          photos.push({ src: '/uploads/' + img.filename, title: p.title, author: p.display_name, id: p.id });
+        }
+      }
+      const grid = document.getElementById('grid');
+      if (photos.length === 0) {
+        grid.outerHTML = '<div class="empty"><div class="empty-art">📷</div><p>아직 업로드된 사진이 없어요.</p></div>';
+        return;
+      }
+      grid.innerHTML = photos.map(p => `
+        <div class="photo-tile" data-src="${escapeHtml(p.src)}" data-id="${p.id}">
+          <img src="${escapeHtml(p.src)}" alt="" loading="lazy">
+          <div class="caption">${escapeHtml(p.title)} · ${escapeHtml(p.author)}</div>
+        </div>
+      `).join('');
+      grid.querySelectorAll('.photo-tile').forEach(t => {
+        t.onclick = () => lightbox(t.dataset.src);
+      });
+    }
+    load();
+  </script>
+</body>
+</html>

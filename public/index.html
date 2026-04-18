@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f7fc">
+  <title>우리 가족 블로그</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="nav"></header>
+
+  <div class="hero-shell">
+    <section class="hero">
+      <span class="hero-kicker">family journal</span>
+      <h1>오늘도, 함께한 순간</h1>
+      <p>작은 하루하루가 쌓여 우리가 됩니다.<br>서로의 이야기를 나누고, 사진으로 기억을 남겨요.</p>
+    </section>
+  </div>
+
+  <main class="container">
+    <div class="row-between" style="margin-bottom:4px">
+      <div id="chips" class="chips"></div>
+      <div style="display:flex;gap:8px">
+        <input id="search" class="input" placeholder="검색" style="width:160px;height:36px;font-size:14px">
+      </div>
+    </div>
+
+    <div id="feed" class="feed"></div>
+    <div id="status"></div>
+  </main>
+
+  <button id="fab" class="fab hide" title="글쓰기" aria-label="글쓰기">＋</button>
+
+  <script type="module">
+    import { api, me, renderNav, renderFooter, formatDate, escapeHtml, initialOf, toast } from '/js/common.js';
+
+    const user = await me();
+    renderNav('home', user);
+    renderFooter();
+
+    if (user) document.getElementById('fab').classList.remove('hide');
+    document.getElementById('fab').onclick = () => location.href = '/write';
+
+    const state = { category: 'all', q: '' };
+    const feedEl = document.getElementById('feed');
+    const chipsEl = document.getElementById('chips');
+    const statusEl = document.getElementById('status');
+
+    async function loadCategories() {
+      const { categories } = await api('/api/posts/categories');
+      const total = categories.reduce((a, c) => a + c.count, 0);
+      chipsEl.innerHTML = [
+        { category: 'all', count: total, label: '전체' },
+        ...categories.map(c => ({ ...c, label: c.category })),
+      ].map(c => `
+        <button class="chip ${state.category === c.category ? 'active' : ''}" data-c="${escapeHtml(c.category)}">
+          ${escapeHtml(c.label)} <span class="chip-count">${c.count}</span>
+        </button>`).join('');
+      chipsEl.querySelectorAll('.chip').forEach(b => {
+        b.onclick = () => {
+          state.category = b.dataset.c;
+          loadFeed(); loadCategories();
+        };
+      });
+    }
+
+    function cardHTML(p) {
+      const imgs = p.images || [];
+      const cover = p.cover_image || imgs[0]?.filename;
+      const src = cover ? `/uploads/${escapeHtml(cover)}` : null;
+      const excerpt = (p.content || '').replace(/\s+/g, ' ').slice(0, 120);
+      return `
+        <article class="feed-card" onclick="location.href='/post/${p.id}'">
+          ${src
+            ? `<div class="feed-card-media"><img src="${src}" alt="" loading="lazy"><div class="feed-card-badge">${escapeHtml(p.category || '일상')}</div></div>`
+            : `<div class="feed-card-media placeholder">${escapeHtml((p.title || 'A').charAt(0))}<div class="feed-card-badge">${escapeHtml(p.category || '일상')}</div></div>`}
+          <div class="feed-card-body">
+            <h3 class="feed-card-title">${escapeHtml(p.title)}</h3>
+            ${excerpt ? `<p class="feed-card-excerpt">${escapeHtml(excerpt)}</p>` : ''}
+            <div class="feed-card-meta">
+              <span class="avatar">${p.user_avatar ? `<img src="${escapeHtml(p.user_avatar)}" alt="">` : escapeHtml(initialOf(p.display_name))}</span>
+              <span>${escapeHtml(p.display_name)}</span>
+              <span class="dot"></span>
+              <span>${formatDate(p.created_at)}</span>
+              ${p.comment_count ? `<span class="dot"></span><span>댓글 ${p.comment_count}</span>` : ''}
+            </div>
+          </div>
+        </article>`;
+    }
+
+    async function loadFeed() {
+      feedEl.innerHTML = '';
+      statusEl.innerHTML = '<div class="spinner"></div>';
+      const params = new URLSearchParams();
+      if (state.category && state.category !== 'all') params.set('category', state.category);
+      if (state.q) params.set('q', state.q);
+      const { posts } = await api('/api/posts?' + params);
+      statusEl.innerHTML = '';
+      if (posts.length === 0) {
+        statusEl.innerHTML = `
+          <div class="empty">
+            <div class="empty-art">＋</div>
+            <p>아직 게시글이 없어요.</p>
+            ${user ? `<a class="btn btn-accent mt-2" href="/write">첫 이야기 쓰기</a>` : ''}
+          </div>`;
+        return;
+      }
+      feedEl.innerHTML = posts.map(cardHTML).join('');
+    }
+
+    let searchTimer;
+    document.getElementById('search').addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => { state.q = e.target.value.trim(); loadFeed(); }, 250);
+    });
+
+    await loadCategories();
+    await loadFeed();
+  </script>
+</body>
+</html>

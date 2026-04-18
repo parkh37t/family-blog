@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>로그인 · 우리 가족 블로그</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <main class="auth-wrap">
+    <div class="auth-card">
+      <a href="/" class="brand" style="justify-content:center;margin-bottom:20px"><span class="brand-mark">家</span><span>우리 가족</span></a>
+      <h1>다시 만나요</h1>
+      <p class="sub">우리 가족의 이야기로 돌아오신 것을 환영해요.</p>
+
+      <form id="form" class="form">
+        <div class="field">
+          <label for="username">아이디</label>
+          <input id="username" class="input" required autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="password">비밀번호</label>
+          <input id="password" type="password" class="input" required autocomplete="current-password">
+        </div>
+        <button class="btn btn-primary btn-lg btn-block" type="submit">로그인</button>
+      </form>
+
+      <p class="swap">
+        초대받으셨나요? <a href="/register">가입하기</a>
+      </p>
+    </div>
+  </main>
+
+  <script type="module">
+    import { api, toast } from '/js/common.js';
+
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button');
+      btn.disabled = true;
+      try {
+        await api('/api/auth/login', {
+          method: 'POST',
+          body: {
+            username: document.getElementById('username').value.trim(),
+            password: document.getElementById('password').value,
+          },
+        });
+        const next = new URLSearchParams(location.search).get('next') || '/';
+        location.href = next;
+      } catch (err) {
+        toast(err.message, 'err');
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

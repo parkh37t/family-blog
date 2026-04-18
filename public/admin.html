@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>관리자 · 우리 가족 블로그</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="admin-wrap">
+    <aside class="admin-side">
+      <a href="/" class="brand"><span class="brand-mark">家</span><span>관리자</span></a>
+      <nav class="admin-nav" id="sideNav">
+        <a data-tab="dashboard" class="active">대시보드</a>
+        <a data-tab="users">구성원 관리</a>
+        <a data-tab="invites">초대코드</a>
+        <a data-tab="posts">게시글 관리</a>
+        <a href="/" style="margin-top:auto;color:var(--ink-muted)">← 블로그로</a>
+      </nav>
+    </aside>
+
+    <main class="admin-main" id="main"></main>
+  </div>
+
+  <script type="module">
+    import { api, me, formatDate, formatDateTime, escapeHtml, initialOf, toast, confirmDialog } from '/js/common.js';
+
+    const user = await me();
+    if (!user) { location.href = '/login?next=/admin'; throw 0; }
+    if (user.role !== 'admin') {
+      document.body.innerHTML = `<main class="empty"><p>관리자만 접근할 수 있어요.</p><a class="btn mt-2" href="/">홈으로</a></main>`;
+      throw 0;
+    }
+
+    const main = document.getElementById('main');
+    const tabs = {
+      dashboard: renderDashboard,
+      users: renderUsers,
+      invites: renderInvites,
+      posts: renderPosts,
+    };
+
+    document.querySelectorAll('#sideNav [data-tab]').forEach(a => {
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        setTab(a.dataset.tab);
+      });
+    });
+
+    async function setTab(name) {
+      document.querySelectorAll('#sideNav a').forEach(a => a.classList.toggle('active', a.dataset?.tab === name));
+      main.innerHTML = '<div class="spinner"></div>';
+      await tabs[name]();
+    }
+
+    // ============ DASHBOARD ============
+    async function renderDashboard() {
+      const { stats } = await api('/api/users/stats');
+      main.innerHTML = `
+        <div class="admin-head"><h1>대시보드</h1></div>
+        <div class="stat-grid">
+          <div class="stat"><div class="label">가족 구성원</div><div class="value">${stats.users}</div></div>
+          <div class="stat"><div class="label">활성 계정</div><div class="value">${stats.active_users}</div></div>
+          <div class="stat"><div class="label">게시글</div><div class="value">${stats.posts}</div></div>
+          <div class="stat"><div class="label">사진</div><div class="value">${stats.images}</div></div>
+          <div class="stat"><div class="label">댓글</div><div class="value">${stats.comments}</div></div>
+        </div>
+
+        <div class="row" style="gap:18px;align-items:stretch;flex-wrap:wrap">
+          <div class="card grow" style="min-width:280px">
+            <h2>최근 게시글</h2>
+            ${stats.recent_posts.length === 0 ? '<p class="muted">아직 없습니다.</p>' : stats.recent_posts.map(p => `
+              <div class="row-between" style="padding:8px 0;border-bottom:1px solid var(--line)">
+                <a href="/post/${p.id}" style="font-weight:500">${escapeHtml(p.title)}</a>
+                <span class="muted" style="font-size:12px">${escapeHtml(p.display_name)} · ${formatDate(p.created_at)}</span>
+              </div>
+            `).join('')}
+          </div>
+          <div class="card grow" style="min-width:280px">
+            <h2>글쓰기 순위</h2>
+            ${stats.top_authors.map(a => `
+              <div class="row-between" style="padding:8px 0;border-bottom:1px solid var(--line)">
+                <span>${escapeHtml(a.display_name)}</span>
+                <span class="pill pill-admin">${a.n}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // ============ USERS ============
+    async function renderUsers() {
+      const { users } = await api('/api/users');
+      main.innerHTML = `
+        <div class="admin-head">
+          <h1>구성원 관리</h1>
+          <button class="btn btn-primary" id="newUser">+ 새 구성원 추가</button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr>
+                <th>이름</th><th>아이디</th><th>역할</th><th>상태</th><th>게시글</th><th>가입일</th><th></th>
+              </tr></thead>
+              <tbody>
+                ${users.map(u => `
+                  <tr>
+                    <td><div class="row" style="gap:8px"><span class="avatar">${u.avatar ? `<img src="${escapeHtml(u.avatar)}">` : escapeHtml(initialOf(u.display_name))}</span>${escapeHtml(u.display_name)}</div></td>
+                    <td class="muted">${escapeHtml(u.username)}</td>
+                    <td><span class="pill ${u.role === 'admin' ? 'pill-admin' : 'pill-member'}">${u.role === 'admin' ? '관리자' : '멤버'}</span></td>
+                    <td><span class="pill ${u.active ? 'pill-ok' : 'pill-off'}">${u.active ? '활성' : '정지'}</span></td>
+                    <td>${u.post_count}</td>
+                    <td class="muted">${formatDate(u.created_at)}</td>
+                    <td style="text-align:right">
+                      <button class="btn btn-sm" data-edit="${u.id}">편집</button>
+                      ${u.id !== user.id ? `<button class="btn btn-sm btn-danger" data-del="${u.id}">삭제</button>` : ''}
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('newUser').onclick = () => userModal(null);
+      main.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => {
+        userModal(users.find(u => u.id == b.dataset.edit));
+      });
+      main.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+        if (!(await confirmDialog('이 구성원을 삭제하시겠습니까? 작성한 글도 함께 삭제됩니다.'))) return;
+        await api('/api/users/' + b.dataset.del, { method: 'DELETE' });
+        toast('삭제되었습니다');
+        renderUsers();
+      });
+    }
+
+    function userModal(u) {
+      const isEdit = !!u;
+      const back = document.createElement('div');
+      back.className = 'modal-backdrop';
+      back.innerHTML = `
+        <div class="modal">
+          <div class="modal-head"><h2>${isEdit ? '구성원 편집' : '새 구성원 추가'}</h2><button class="modal-close">✕</button></div>
+          <form class="form" id="uform">
+            <div class="field">
+              <label>표시 이름</label>
+              <input class="input" name="display_name" value="${escapeHtml(u?.display_name || '')}" required>
+            </div>
+            ${!isEdit ? `
+              <div class="field"><label>아이디</label><input class="input" name="username" required minlength="3" maxlength="30"></div>
+            ` : ''}
+            <div class="field">
+              <label>역할</label>
+              <select class="select" name="role">
+                <option value="member" ${u?.role === 'member' ? 'selected' : ''}>멤버</option>
+                <option value="admin" ${u?.role === 'admin' ? 'selected' : ''}>관리자</option>
+              </select>
+            </div>
+            ${isEdit ? `
+              <div class="field">
+                <label>상태</label>
+                <select class="select" name="active">
+                  <option value="1" ${u.active ? 'selected' : ''}>활성</option>
+                  <option value="0" ${!u.active ? 'selected' : ''}>정지</option>
+                </select>
+              </div>
+            ` : ''}
+            <div class="field">
+              <label>비밀번호 ${isEdit ? '(변경 시에만)' : ''}</label>
+              <input class="input" name="password" type="password" ${!isEdit ? 'required minlength="6"' : 'minlength="6"'}>
+            </div>
+            <div class="field">
+              <label>소개</label>
+              <textarea class="textarea" name="bio" style="min-height:60px">${escapeHtml(u?.bio || '')}</textarea>
+            </div>
+            <div class="modal-foot">
+              <button type="button" class="btn btn-ghost" id="cancelBtn">취소</button>
+              <button type="submit" class="btn btn-primary">${isEdit ? '저장' : '추가'}</button>
+            </div>
+          </form>
+        </div>
+      `;
+      document.body.appendChild(back);
+      const close = () => back.remove();
+      back.addEventListener('click', e => { if (e.target === back) close(); });
+      back.querySelector('.modal-close').onclick = close;
+      back.querySelector('#cancelBtn').onclick = close;
+
+      back.querySelector('#uform').onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = Object.fromEntries(new FormData(e.target));
+        if (fd.active !== undefined) fd.active = fd.active === '1';
+        if (!fd.password) delete fd.password;
+        try {
+          if (isEdit) await api('/api/users/' + u.id, { method: 'PUT', body: fd });
+          else await api('/api/users', { method: 'POST', body: fd });
+          toast('저장되었습니다');
+          close();
+          renderUsers();
+        } catch (err) { toast(err.message, 'err'); }
+      };
+    }
+
+    // ============ INVITES ============
+    async function renderInvites() {
+      const { invites } = await api('/api/users/invites');
+      main.innerHTML = `
+        <div class="admin-head">
+          <h1>초대코드</h1>
+          <button class="btn btn-primary" id="newInvite">+ 초대코드 생성</button>
+        </div>
+        <div class="card">
+          <p class="muted mb-2">가족에게 초대코드를 공유하면, 가입 페이지에서 이 코드로 회원가입할 수 있습니다.</p>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>코드</th><th>역할</th><th>만료</th><th>발급자</th><th>상태</th><th></th></tr></thead>
+              <tbody>
+                ${invites.length === 0 ? `<tr><td colspan="6" class="muted text-center" style="padding:30px">아직 발급된 초대코드가 없습니다.</td></tr>` : invites.map(i => {
+                  const used = !!i.used_by;
+                  const expired = i.expires_at && new Date(i.expires_at) < new Date();
+                  return `
+                    <tr>
+                      <td><code style="background:var(--bg-muted);padding:4px 10px;border-radius:6px;font-weight:600">${escapeHtml(i.code)}</code></td>
+                      <td><span class="pill ${i.role === 'admin' ? 'pill-admin' : 'pill-member'}">${i.role === 'admin' ? '관리자' : '멤버'}</span></td>
+                      <td class="muted">${i.expires_at ? formatDate(i.expires_at) : '무제한'}</td>
+                      <td class="muted">${escapeHtml(i.creator_name || '')}</td>
+                      <td>${used ? `<span class="pill pill-off">${escapeHtml(i.used_by_name || '사용됨')}</span>` : expired ? `<span class="pill pill-off">만료</span>` : `<span class="pill pill-ok">사용 가능</span>`}</td>
+                      <td style="text-align:right">
+                        ${!used ? `<button class="btn btn-sm" data-copy="${i.code}">링크 복사</button>` : ''}
+                        <button class="btn btn-sm btn-danger" data-del="${i.id}">삭제</button>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('newInvite').onclick = inviteModal;
+      main.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => {
+        const url = `${location.origin}/register?code=${b.dataset.copy}`;
+        navigator.clipboard?.writeText(url);
+        toast('초대 링크가 복사되었습니다');
+      });
+      main.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+        if (!(await confirmDialog('초대코드를 삭제할까요?'))) return;
+        await api('/api/users/invites/' + b.dataset.del, { method: 'DELETE' });
+        renderInvites();
+      });
+    }
+
+    function inviteModal() {
+      const back = document.createElement('div');
+      back.className = 'modal-backdrop';
+      back.innerHTML = `
+        <div class="modal">
+          <div class="modal-head"><h2>초대코드 생성</h2><button class="modal-close">✕</button></div>
+          <form class="form" id="iform">
+            <div class="field">
+              <label>역할</label>
+              <select class="select" name="role">
+                <option value="member">멤버</option>
+                <option value="admin">관리자</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>만료 기간</label>
+              <select class="select" name="expires_days">
+                <option value="">무제한</option>
+                <option value="1">1일</option>
+                <option value="7" selected>7일</option>
+                <option value="30">30일</option>
+              </select>
+            </div>
+            <div class="modal-foot">
+              <button type="button" class="btn btn-ghost" id="cancel">취소</button>
+              <button type="submit" class="btn btn-primary">생성</button>
+            </div>
+          </form>
+        </div>
+      `;
+      document.body.appendChild(back);
+      const close = () => back.remove();
+      back.querySelector('.modal-close').onclick = close;
+      back.querySelector('#cancel').onclick = close;
+      back.addEventListener('click', e => { if (e.target === back) close(); });
+      back.querySelector('#iform').onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = Object.fromEntries(new FormData(e.target));
+        if (!fd.expires_days) delete fd.expires_days;
+        else fd.expires_days = Number(fd.expires_days);
+        try {
+          const { code } = await api('/api/users/invites', { method: 'POST', body: fd });
+          toast(`초대코드 ${code} 생성됨`);
+          close();
+          renderInvites();
+        } catch (err) { toast(err.message, 'err'); }
+      };
+    }
+
+    // ============ POSTS ============
+    async function renderPosts() {
+      const { posts } = await api('/api/posts?limit=200');
+      main.innerHTML = `
+        <div class="admin-head"><h1>게시글 관리</h1></div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>제목</th><th>작성자</th><th>카테고리</th><th>사진</th><th>작성일</th><th></th></tr></thead>
+              <tbody>
+                ${posts.length === 0 ? `<tr><td colspan="6" class="muted text-center" style="padding:30px">아직 게시글이 없습니다.</td></tr>` : posts.map(p => `
+                  <tr>
+                    <td><a href="/post/${p.id}" style="font-weight:500">${escapeHtml(p.title)}</a></td>
+                    <td>${escapeHtml(p.display_name)}</td>
+                    <td class="muted">${escapeHtml(p.category || '')}</td>
+                    <td class="muted">${(p.images || []).length}장</td>
+                    <td class="muted">${formatDate(p.created_at)}</td>
+                    <td style="text-align:right">
+                      <a class="btn btn-sm" href="/write?id=${p.id}">수정</a>
+                      <button class="btn btn-sm btn-danger" data-delpost="${p.id}">삭제</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+      main.querySelectorAll('[data-delpost]').forEach(b => b.onclick = async () => {
+        if (!(await confirmDialog('게시글을 삭제할까요? 사진과 댓글도 함께 삭제됩니다.'))) return;
+        await api('/api/posts/' + b.dataset.delpost, { method: 'DELETE' });
+        renderPosts();
+      });
+    }
+
+    setTab('dashboard');
+  </script>
+</body>
+</html>

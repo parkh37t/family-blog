@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>가족 구성원 · 우리 가족 블로그</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="nav"></header>
+
+  <div class="hero-shell">
+    <section class="hero">
+      <span class="hero-kicker">our family</span>
+      <h1>함께 쓰는 사람들</h1>
+      <p>서로의 이야기에 반응하고, 기록을 나눠가는 가족이에요.</p>
+    </section>
+  </div>
+
+  <main class="container">
+    <div id="grid" class="feed" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))"></div>
+  </main>
+
+  <script type="module">
+    import { api, me, renderNav, renderFooter, escapeHtml, initialOf } from '/js/common.js';
+    const user = await me();
+    renderNav('members', user);
+    renderFooter();
+
+    async function load() {
+      const { posts } = await api('/api/posts?limit=1');
+      // Public members list: derived from posts
+      const seen = new Map();
+      const all = await api('/api/posts?limit=500');
+      for (const p of all.posts) {
+        if (!seen.has(p.username)) {
+          seen.set(p.username, { username: p.username, display_name: p.display_name, avatar: p.user_avatar, count: 0 });
+        }
+        seen.get(p.username).count += 1;
+      }
+      const members = [...seen.values()].sort((a, b) => b.count - a.count);
+      const grid = document.getElementById('grid');
+      if (members.length === 0) {
+        grid.innerHTML = `<div class="empty"><p>아직 글을 쓴 구성원이 없어요.</p></div>`;
+        return;
+      }
+      grid.innerHTML = members.map(m => `
+        <a href="/?user=${encodeURIComponent(m.username)}" class="feed-card" style="cursor:pointer">
+          <div class="feed-card-media placeholder" style="aspect-ratio:3/2">
+            <span class="avatar avatar-lg" style="width:80px;height:80px;font-size:28px">${m.avatar ? `<img src="${escapeHtml(m.avatar)}">` : escapeHtml(initialOf(m.display_name))}</span>
+          </div>
+          <div class="feed-card-body">
+            <h3 class="feed-card-title" style="font-family:var(--font-serif)">${escapeHtml(m.display_name)}</h3>
+            <p class="feed-card-excerpt">작성한 이야기 ${m.count}개</p>
+          </div>
+        </a>
+      `).join('');
+    }
+
+    load();
+  </script>
+</body>
+</html>

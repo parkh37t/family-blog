@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>글쓰기 · 우리 가족 블로그</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="nav"></header>
+
+  <main class="article" style="max-width:820px">
+    <h1 class="serif" style="font-size:28px;margin:0 0 24px" id="pageTitle">새 이야기 쓰기</h1>
+
+    <form id="form" class="form">
+      <div class="field">
+        <label for="title">제목</label>
+        <input id="title" class="input" required maxlength="120" placeholder="오늘의 제목을 적어주세요">
+      </div>
+
+      <div class="row" style="gap:12px">
+        <div class="field grow">
+          <label for="category">카테고리</label>
+          <select id="category" class="select">
+            <option>일상</option>
+            <option>아이들</option>
+            <option>여행</option>
+            <option>기념일</option>
+            <option>음식</option>
+            <option>취미</option>
+            <option>추억</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>사진</label>
+        <label class="uploader" id="dropzone">
+          <div class="uploader-icon">📷</div>
+          <p><strong>사진을 선택</strong>하거나 이곳에 드래그하세요</p>
+          <p style="font-size:12px">여러 장 가능 · 한 장당 최대 20MB · JPG/PNG/HEIC</p>
+          <input id="fileInput" type="file" accept="image/*" multiple>
+        </label>
+        <div id="previews" class="preview-grid"></div>
+      </div>
+
+      <div class="field">
+        <label for="content">내용</label>
+        <textarea id="content" class="textarea" placeholder="함께 나눈 순간을 편하게 적어주세요..." style="min-height:260px"></textarea>
+      </div>
+
+      <div class="row-between mt-2">
+        <a class="btn btn-ghost" href="javascript:history.back()">취소</a>
+        <button class="btn btn-primary btn-lg" type="submit" id="submit">게시하기</button>
+      </div>
+    </form>
+  </main>
+
+  <script type="module">
+    import { api, me, renderNav, renderFooter, escapeHtml, toast } from '/js/common.js';
+
+    const user = await me();
+    if (!user) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); throw 0; }
+    renderNav('', user);
+    renderFooter();
+
+    const params = new URLSearchParams(location.search);
+    const editingId = params.get('id');
+
+    const titleEl = document.getElementById('title');
+    const catEl = document.getElementById('category');
+    const contentEl = document.getElementById('content');
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const previewsEl = document.getElementById('previews');
+    const submitBtn = document.getElementById('submit');
+
+    let images = [];
+    let coverIndex = 0;
+
+    if (editingId) {
+      document.getElementById('pageTitle').textContent = '이야기 수정';
+      submitBtn.textContent = '수정 저장';
+      try {
+        const { post } = await api('/api/posts/' + editingId);
+        titleEl.value = post.title;
+        contentEl.value = post.content || '';
+        catEl.value = post.category || '일상';
+        images = (post.images || []).map(i => ({ filename: i.filename, caption: i.caption || '', url: '/uploads/' + i.filename }));
+        if (post.cover_image) {
+          const idx = images.findIndex(i => i.filename === post.cover_image);
+          coverIndex = idx >= 0 ? idx : 0;
+        }
+        renderPreviews();
+      } catch (e) {
+        toast(e.message, 'err');
+      }
+    }
+
+    function renderPreviews() {
+      previewsEl.innerHTML = images.map((img, i) => `
+        <div class="preview-item" data-i="${i}">
+          <img src="${escapeHtml(img.url)}" alt="">
+          ${i === coverIndex ? `<span class="preview-cover">대표</span>` : ''}
+          <button type="button" class="preview-remove" title="제거" data-remove="${i}">✕</button>
+        </div>
+      `).join('');
+      previewsEl.querySelectorAll('[data-remove]').forEach(b => {
+        b.onclick = (e) => {
+          e.stopPropagation();
+          const i = Number(b.dataset.remove);
+          images.splice(i, 1);
+          if (coverIndex >= images.length) coverIndex = 0;
+          renderPreviews();
+        };
+      });
+      previewsEl.querySelectorAll('.preview-item').forEach(p => {
+        p.onclick = () => { coverIndex = Number(p.dataset.i); renderPreviews(); };
+      });
+    }
+
+    async function uploadFiles(files) {
+      if (!files.length) return;
+      const fd = new FormData();
+      [...files].forEach(f => fd.append('files', f));
+      submitBtn.disabled = true;
+      const old = submitBtn.textContent;
+      submitBtn.textContent = '업로드 중...';
+      try {
+        const { files: uploaded } = await api('/api/uploads', { method: 'POST', body: fd });
+        images = images.concat(uploaded.map(u => ({ filename: u.filename, url: u.url, caption: '' })));
+        renderPreviews();
+      } catch (e) {
+        toast(e.message, 'err');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = old;
+      }
+    }
+
+    fileInput.addEventListener('change', () => {
+      uploadFiles(fileInput.files);
+      fileInput.value = '';
+    });
+
+    ['dragover'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
+    ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+    dropzone.addEventListener('drop', e => {
+      if (e.dataTransfer?.files?.length) uploadFiles(e.dataTransfer.files);
+    });
+
+    // paste image support (mobile/PC)
+    window.addEventListener('paste', e => {
+      const items = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
+      if (items.length) uploadFiles(items);
+    });
+
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      submitBtn.disabled = true;
+      try {
+        const body = {
+          title: titleEl.value.trim(),
+          content: contentEl.value,
+          category: catEl.value,
+          images,
+          cover_image: images[coverIndex]?.filename ?? null,
+        };
+        const result = editingId
+          ? await api('/api/posts/' + editingId, { method: 'PUT', body }).then(() => ({ id: editingId }))
+          : await api('/api/posts', { method: 'POST', body });
+        toast('저장되었습니다');
+        setTimeout(() => location.href = '/post/' + result.id, 500);
+      } catch (err) {
+        toast(err.message, 'err');
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
