@@ -111,6 +111,32 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .brand {
   display: flex; align-items: center; gap: 10px;
   font-weight: 700; font-size: 20px; letter-spacing: -0.02em;
+  text-decoration: none;
+}
+.brand-logo {
+  height: 28px;
+  width: auto;
+  display: block;
+}
+@media (max-width: 720px) {
+  .brand-logo { height: 24px; }
+}
+.brand-auth {
+  justify-content: center;
+  margin-bottom: 28px;
+}
+.brand-auth .brand-logo { height: 40px; }
+.brand-admin {
+  gap: 8px;
+  margin-bottom: 26px;
+}
+.brand-admin .brand-logo { height: 24px; }
+.brand-suffix {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
 }
 .brand-mark {
   width: 32px; height: 32px; border-radius: 10px;

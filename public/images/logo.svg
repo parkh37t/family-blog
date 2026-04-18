@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 180" role="img" aria-label="clubschool" preserveAspectRatio="xMidYMid meet">
+  <title>clubschool</title>
+  <style>
+    .cs-text {
+      font-family: 'Montserrat', 'Pretendard Variable', Pretendard, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+      font-weight: 900;
+      font-size: 170px;
+      letter-spacing: -5px;
+    }
+    .cs-blue   { fill: #2196F3; }
+    .cs-orange { fill: #F58220; }
+  </style>
+  <text x="10" y="140" class="cs-text">
+    <tspan class="cs-blue">club</tspan><tspan class="cs-orange">school</tspan>
+  </text>
+</svg>
