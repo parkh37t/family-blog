@@ -114,7 +114,7 @@ export function renderNav(active, user) {
   nav.innerHTML = `
     <div class="nav-inner">
       <a href="/" class="brand" aria-label="clubschool">
-        <img src="/images/logo.svg" alt="clubschool" class="brand-logo">
+        <span class="logo-text"><span class="logo-club">club</span><span class="logo-school">school</span></span>
       </a>
       <nav class="nav-menu">
         <a href="/" ${active === 'home' ? 'class="active"' : ''}>홈</a>

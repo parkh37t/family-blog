@@ -113,6 +113,27 @@ button, input, textarea, select { font: inherit; color: inherit; }
   font-weight: 700; font-size: 20px; letter-spacing: -0.02em;
   text-decoration: none;
 }
+/* clubschool logo — rendered as CSS text so Pretendard font is guaranteed */
+.logo-text {
+  font-family: var(--font);
+  font-weight: 900;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: -1.3px;
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+}
+.logo-text .logo-club   { color: #2196F3; }
+.logo-text .logo-school { color: #F58220; }
+.logo-text.logo-lg { font-size: 40px; letter-spacing: -2px; }
+
+@media (max-width: 720px) {
+  .logo-text { font-size: 22px; }
+  .logo-text.logo-lg { font-size: 34px; }
+}
+
+/* legacy img support (if referenced anywhere) */
 .brand-logo {
   height: 28px;
   width: auto;
@@ -125,12 +146,10 @@ button, input, textarea, select { font: inherit; color: inherit; }
   justify-content: center;
   margin-bottom: 28px;
 }
-.brand-auth .brand-logo { height: 40px; }
 .brand-admin {
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 26px;
 }
-.brand-admin .brand-logo { height: 24px; }
 .brand-suffix {
   font-size: 14px;
   font-weight: 600;
