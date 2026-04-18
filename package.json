@@ -11,6 +11,7 @@
     "start": "node --env-file-if-exists=.env server.js",
     "dev": "node --env-file-if-exists=.env --watch server.js",
     "seed": "node --env-file-if-exists=.env seed.js",
+    "setup": "node --env-file-if-exists=.env setup.js",
     "start:prod": "node seed.js && node server.js"
   },
   "dependencies": {
