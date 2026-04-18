@@ -27,11 +27,11 @@
   --danger: #dc3545;
   --info: #3b82f6;
 
-  /* typography */
+  /* typography — Pretendard everywhere */
   --font: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
           system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo',
           'Noto Sans KR', sans-serif;
-  --font-serif: 'Nanum Myeongjo', ui-serif, Georgia, serif;
+  --font-serif: var(--font);   /* alias kept for backward compat */
 
   /* sizing */
   --radius: 14px;
@@ -252,12 +252,11 @@ button, input, textarea, select { font: inherit; color: inherit; }
   margin-bottom: 18px;
 }
 .hero h1 {
-  font-family: var(--font-serif);
   font-size: clamp(32px, 6vw, 54px);
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
   margin: 0 0 14px;
-  font-weight: 700;
+  font-weight: 800;
 }
 .hero p {
   font-size: clamp(15px, 1.6vw, 18px);
@@ -372,10 +371,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
   display: grid; place-items: center;
   background: linear-gradient(135deg, var(--accent-soft) 0%, #c7dcff 100%);
   color: var(--accent-ink);
-  font-family: var(--font-serif);
   font-size: 44px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 900;
+  letter-spacing: -0.04em;
 }
 .feed-card-badge {
   position: absolute; top: 12px; left: 12px;
@@ -483,11 +481,11 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 .article-header { margin-bottom: 32px; }
 .article-header h1 {
-  font-family: var(--font-serif);
   font-size: clamp(28px, 5vw, 44px);
   line-height: 1.2;
   margin: 14px 0 16px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.035em;
+  font-weight: 800;
 }
 .article-meta {
   display: flex; align-items: center; gap: 12px;
@@ -614,10 +612,10 @@ button, input, textarea, select { font: inherit; color: inherit; }
   border: 1px solid var(--line);
 }
 .auth-card h1 {
-  font-family: var(--font-serif);
-  font-size: 28px;
+  font-size: 26px;
   margin: 0 0 6px;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  font-weight: 800;
 }
 .auth-card .sub { color: var(--ink-muted); font-size: 14px; margin-bottom: 28px; }
 .auth-card .swap { text-align: center; margin-top: 18px; font-size: 14px; color: var(--ink-muted); }
@@ -677,7 +675,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
   padding: 18px 20px;
 }
 .stat .label { font-size: 12px; color: var(--ink-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.08em; }
-.stat .value { font-family: var(--font-serif); font-size: 28px; font-weight: 700; color: var(--ink); }
+.stat .value { font-size: 28px; font-weight: 800; color: var(--ink); letter-spacing: -0.02em; }
 
 .card {
   background: var(--bg-elev);
@@ -822,7 +820,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .hide { display: none !important; }
 .muted { color: var(--ink-muted); }
-.serif { font-family: var(--font-serif); }
+.serif { font-weight: 800; letter-spacing: -0.03em; }  /* display typography (Pretendard) */
 .mb-0 { margin-bottom: 0; }
 .mb-1 { margin-bottom: 8px; }
 .mb-2 { margin-bottom: 16px; }
