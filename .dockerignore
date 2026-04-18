@@ -1,0 +1,16 @@
+node_modules
+data
+uploads
+.git
+.github
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+.claude
+README.md
+render.yaml

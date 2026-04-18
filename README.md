@@ -49,45 +49,67 @@ npm start          # http://localhost:3000
 
 ---
 
-## 🌐 웹에 배포하기 (GitHub + Render, 무료)
+## 🌐 웹에 배포하기 (Fly.io, 무료 + 3GB 영구 볼륨)
 
-### Step 1 — GitHub에 푸시
+### Step 1 — flyctl 설치 (Windows PowerShell)
 
-GitHub CLI 사용 (추천):
-```bash
-gh auth login                                    # 브라우저 인증
-gh repo create family-blog --public --source=. --push
+```powershell
+iwr https://fly.io/install.ps1 -useb | iex
 ```
 
-수동 방법:
-1. https://github.com/new 에서 `family-blog` 리포 생성 (Private/Public 자유)
-2. 아래 명령어 실행:
+설치 후 PowerShell 재시작하면 `flyctl` 명령 사용 가능.
+macOS/Linux는 `curl -L https://fly.io/install.sh | sh`.
+
+### Step 2 — 로그인 및 배포
+
 ```bash
-git remote add origin https://github.com/<사용자명>/family-blog.git
-git push -u origin main
+cd C:/Users/jaeha/Documents/Cowork/family
+
+# 1) 로그인 (브라우저에서 GitHub 또는 이메일로 가입/로그인)
+flyctl auth login
+
+# 2) 앱 생성 (볼륨·시크릿은 뒤에서 따로, 지금은 배포하지 않음)
+flyctl launch --no-deploy --copy-config --name family-blog-<고유> --region nrt
+
+# 3) 3GB 영구 볼륨 생성 (SQLite DB + 업로드 사진 저장소)
+flyctl volumes create family_blog_data --region nrt --size 3 --yes
+
+# 4) JWT 시크릿 주입 (앱이 production에서 필수로 요구)
+flyctl secrets set JWT_SECRET=$(openssl rand -hex 32)
+
+# 5) 배포!
+flyctl deploy
 ```
 
-### Step 2 — Render.com에 배포
+약 2~4분 후 `https://family-blog-<고유>.fly.dev` 발급됩니다.
 
-1. https://dashboard.render.com 접속 → GitHub 계정 연결
-2. **New → Blueprint** 선택
-3. `family-blog` 리포 선택
-4. `render.yaml` 을 자동 감지 → **Apply** 클릭
-5. 약 2~3분 후 `https://family-blog-xxxx.onrender.com` 발급
+> 💡 **무료 플랜 한도**: 3 shared-cpu-1x VM + 3GB 볼륨 + 160GB 아웃바운드/월.
+> 가족용 블로그는 한도를 넘을 일이 거의 없습니다. 카드 등록만 되면 과금되지 않습니다.
 
-#### 무엇이 자동 설정되나요?
-- `NODE_ENV=production`
-- `JWT_SECRET` 자동 생성 (Render가 안전한 값 주입)
-- 영구 디스크 1GB (`/var/data`)에 SQLite DB + 업로드 사진 저장
-- `/healthz` 헬스체크
-- 빌드 후 자동으로 `seed.js` 실행 → 관리자 계정 자동 생성
+### Step 3 — 첫 로그인
 
-#### 배포 후 첫 로그인
-1. 배포된 URL → `/login` 접속
-2. `admin` / `admin1234` 로 로그인
-3. 즉시 `/me` 에서 비밀번호 변경
-4. `/admin` → **구성원 관리**에서 가족 추가 또는 **초대코드** 발급
-5. 가족에게 초대 링크 공유 → 모바일에서 바로 가입/글쓰기 가능!
+1. 발급된 URL → `/login` 접속
+2. `admin` / `admin1234` 로 로그인 (컨테이너 첫 실행 시 자동 생성됨)
+3. 즉시 `/me` 에서 **비밀번호 변경**
+4. `/admin` → **초대코드** 탭에서 가족 초대 링크 발급 → 카톡 공유
+5. 가족이 링크 클릭 → 모바일에서 바로 가입하고 사진·글 업로드 🎉
+
+### Step 4 — 이후 업데이트
+코드를 수정하고 GitHub에 푸시한 뒤:
+```bash
+flyctl deploy
+```
+볼륨(사진·DB)은 그대로 유지되고, 앱 코드만 새 버전으로 교체됩니다.
+
+### 유용한 명령어
+```bash
+flyctl logs                    # 실시간 로그
+flyctl status                  # 현재 상태
+flyctl ssh console             # 컨테이너 접속
+flyctl volumes list            # 볼륨 확인
+flyctl secrets list            # 시크릿 목록
+flyctl apps destroy <앱명>     # 완전 삭제
+```
 
 ### Step 3 — 스마트폰 홈 화면에 추가 (선택)
 - iOS Safari: 공유 → "홈 화면에 추가"
@@ -153,6 +175,6 @@ family/
 | `UPLOADS_DIR` | 업로드 이미지 저장 경로 | |
 
 ## 💡 다른 호스팅으로 배포하기
+- **Render Starter ($7/월)**: `render.yaml` 포함됨 → Blueprint로 배포 (무료 플랜은 디스크 미지원)
 - **Railway**: GitHub 연결 후 Volume 1GB 추가 → `/var/data` 마운트
-- **Fly.io**: `fly launch` → Volume 1GB 생성
-- **자체 VPS**: `pm2 start server.js` + Nginx 리버스 프록시
+- **자체 VPS**: `Dockerfile` 그대로 사용 또는 `pm2 start server.js` + Nginx 리버스 프록시
