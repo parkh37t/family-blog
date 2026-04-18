@@ -11,7 +11,7 @@
   <main id="main" class="article"></main>
 
   <script type="module">
-    import { api, me, renderNav, renderFooter, formatDateTime, formatDate, escapeHtml, initialOf, lightbox, toast, confirmDialog } from '/js/common.js';
+    import { api, me, renderNav, renderFooter, formatDateTime, formatDate, escapeHtml, initialOf, lightbox, toast, confirmDialog, imgUrl } from '/js/common.js';
 
     const user = await me();
     renderNav('', user);
@@ -54,11 +54,13 @@
 
         ${p.images && p.images.length ? `
           <div class="article-gallery">
-            ${p.images.map(img => `
-              <figure data-src="/uploads/${escapeHtml(img.filename)}">
-                <img src="/uploads/${escapeHtml(img.filename)}" alt="${escapeHtml(img.caption || '')}" loading="lazy">
-              </figure>
-            `).join('')}
+            ${p.images.map(img => {
+              const u = escapeHtml(imgUrl(img.filename));
+              return `
+              <figure data-src="${u}">
+                <img src="${u}" alt="${escapeHtml(img.caption || '')}" loading="lazy">
+              </figure>`;
+            }).join('')}
           </div>` : ''}
 
         ${p.content ? `<div class="article-body">${escapeHtml(p.content)}</div>` : ''}

@@ -33,7 +33,7 @@
   <button id="fab" class="fab hide" title="글쓰기" aria-label="글쓰기">＋</button>
 
   <script type="module">
-    import { api, me, renderNav, renderFooter, formatDate, escapeHtml, initialOf, toast } from '/js/common.js';
+    import { api, me, renderNav, renderFooter, formatDate, escapeHtml, initialOf, toast, imgUrl } from '/js/common.js';
 
     const user = await me();
     renderNav('home', user);
@@ -68,7 +68,7 @@
     function cardHTML(p) {
       const imgs = p.images || [];
       const cover = p.cover_image || imgs[0]?.filename;
-      const src = cover ? `/uploads/${escapeHtml(cover)}` : null;
+      const src = cover ? escapeHtml(imgUrl(cover)) : null;
       const excerpt = (p.content || '').replace(/\s+/g, ' ').slice(0, 120);
       return `
         <article class="feed-card" onclick="location.href='/post/${p.id}'">

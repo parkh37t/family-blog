@@ -50,7 +50,7 @@
   </main>
 
   <script type="module">
-    import { api, me, renderNav, renderFooter, lightbox, escapeHtml } from '/js/common.js';
+    import { api, me, renderNav, renderFooter, lightbox, escapeHtml, imgUrl } from '/js/common.js';
     const user = await me();
     renderNav('gallery', user);
     renderFooter();
@@ -63,7 +63,7 @@
       const photos = [];
       for (const p of posts) {
         for (const img of (p.images || [])) {
-          photos.push({ src: '/uploads/' + img.filename, title: p.title, author: p.display_name, id: p.id });
+          photos.push({ src: imgUrl(img.filename), title: p.title, author: p.display_name, id: p.id });
         }
       }
       const grid = document.getElementById('grid');

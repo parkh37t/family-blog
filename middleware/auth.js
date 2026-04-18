@@ -11,12 +11,15 @@ export function signToken(user) {
   );
 }
 
-export function authOptional(req, res, next) {
+export async function authOptional(req, res, next) {
   const token = req.cookies?.token || req.headers.authorization?.replace('Bearer ', '');
   if (!token) return next();
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const user = get('SELECT id, username, display_name, role, avatar, active FROM users WHERE id = ?', [payload.id]);
+    const user = await get(
+      'SELECT id, username, display_name, role, avatar, active FROM users WHERE id = ?',
+      [payload.id]
+    );
     if (user && user.active) req.user = user;
   } catch {}
   next();

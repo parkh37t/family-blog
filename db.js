@@ -1,88 +1,137 @@
-import { DatabaseSync } from 'node:sqlite';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import fs from 'node:fs';
+import pg from 'pg';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+const { Pool } = pg;
 
-export const DATA_DIR = dataDir;
-export const db = new DatabaseSync(path.join(dataDir, 'blog.db'));
+if (!process.env.DATABASE_URL) {
+  console.error('[FATAL] DATABASE_URL 환경변수가 설정되지 않았습니다. .env 파일 또는 호스팅 대시보드에서 설정해 주세요.');
+  process.exit(1);
+}
 
-db.exec(`
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL.includes('supabase') || process.env.DATABASE_URL.includes('sslmode=require')
+    ? { rejectUnauthorized: false }
+    : false,
+  max: 4,
+  idleTimeoutMillis: 30_000,
+});
+
+// Convert SQLite-style `?` placeholders to PostgreSQL `$1, $2, ...`
+function toPgPlaceholders(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
+
+export async function query(sql, params = []) {
+  const { rows } = await pool.query(toPgPlaceholders(sql), params);
+  return rows;
+}
+
+export async function get(sql, params = []) {
+  const { rows } = await pool.query(toPgPlaceholders(sql), params);
+  return rows[0] || null;
+}
+
+/**
+ * INSERT / UPDATE / DELETE helper.
+ * For INSERT returning an id, append `RETURNING id` to the SQL.
+ * The returned object exposes `lastInsertRowid` for call-site compatibility.
+ */
+export async function run(sql, params = []) {
+  const { rows, rowCount } = await pool.query(toPgPlaceholders(sql), params);
+  return {
+    lastInsertRowid: rows[0]?.id ?? null,
+    changes: rowCount,
+  };
+}
+
+/**
+ * Transaction helper. Pass an async callback that receives a client with
+ * scoped { query, get, run } methods. Automatically BEGIN/COMMIT/ROLLBACK.
+ */
+export async function transaction(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const scoped = {
+      query: async (sql, params = []) => (await client.query(toPgPlaceholders(sql), params)).rows,
+      get: async (sql, params = []) => (await client.query(toPgPlaceholders(sql), params)).rows[0] || null,
+      run: async (sql, params = []) => {
+        const { rows, rowCount } = await client.query(toPgPlaceholders(sql), params);
+        return { lastInsertRowid: rows[0]?.id ?? null, changes: rowCount };
+      },
+    };
+    const result = await fn(scoped);
+    await client.query('COMMIT');
+    return result;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+// ============ SCHEMA MIGRATION (runs once on startup) ============
+const SCHEMA = `
   CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     display_name TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'member',
     avatar TEXT,
     bio TEXT,
-    active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
   CREATE TABLE IF NOT EXISTS posts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     content TEXT,
     cover_image TEXT,
     category TEXT DEFAULT '일상',
-    published INTEGER NOT NULL DEFAULT 1,
+    published BOOLEAN NOT NULL DEFAULT TRUE,
     likes INTEGER NOT NULL DEFAULT 0,
     views INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
   CREATE TABLE IF NOT EXISTS post_images (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    post_id INTEGER NOT NULL,
+    id SERIAL PRIMARY KEY,
+    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
     filename TEXT NOT NULL,
     caption TEXT,
-    position INTEGER NOT NULL DEFAULT 0,
-    FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+    position INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS comments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    post_id INTEGER NOT NULL,
-    user_id INTEGER NOT NULL,
+    id SERIAL PRIMARY KEY,
+    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
   CREATE TABLE IF NOT EXISTS invites (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     code TEXT UNIQUE NOT NULL,
-    created_by INTEGER NOT NULL,
-    used_by INTEGER,
+    created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    used_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     role TEXT NOT NULL DEFAULT 'member',
-    expires_at TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (created_by) REFERENCES users(id),
-    FOREIGN KEY (used_by) REFERENCES users(id)
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
 
   CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC);
-  CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id);
-  CREATE INDEX IF NOT EXISTS idx_images_post ON post_images(post_id);
+  CREATE INDEX IF NOT EXISTS idx_posts_user    ON posts(user_id);
+  CREATE INDEX IF NOT EXISTS idx_images_post   ON post_images(post_id);
   CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id);
-`);
+`;
 
-export function query(sql, params = []) {
-  return db.prepare(sql).all(...params);
-}
-
-export function get(sql, params = []) {
-  return db.prepare(sql).get(...params);
-}
-
-export function run(sql, params = []) {
-  return db.prepare(sql).run(...params);
+export async function ensureSchema() {
+  await pool.query(SCHEMA);
 }

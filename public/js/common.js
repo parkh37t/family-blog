@@ -47,6 +47,17 @@ export function formatDateTime(iso) {
   return d.toLocaleString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+/**
+ * Returns a displayable URL for a stored image reference.
+ * - If it's already an absolute URL (http/https), return as-is.
+ * - Otherwise treat it as a legacy local filename and prefix with /uploads/ (for dev).
+ */
+export function imgUrl(filename) {
+  if (!filename) return '';
+  if (/^https?:\/\//.test(filename)) return filename;
+  return '/uploads/' + filename;
+}
+
 export function escapeHtml(s) {
   if (s == null) return '';
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

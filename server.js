@@ -3,10 +3,11 @@ import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authOptional } from './middleware/auth.js';
+import { ensureSchema } from './db.js';
 import authRoutes from './routes/auth.js';
 import postsRoutes from './routes/posts.js';
 import usersRoutes from './routes/users.js';
-import uploadsRoutes, { uploadsDir } from './routes/uploads.js';
+import uploadsRoutes from './routes/uploads.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -30,7 +31,6 @@ app.use('/api/uploads', uploadsRoutes);
 
 app.get('/healthz', (req, res) => res.json({ ok: true, env: isProd ? 'production' : 'development' }));
 
-app.use('/uploads', express.static(uploadsDir, { maxAge: '30d', immutable: true }));
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'], maxAge: isProd ? '1h' : '0' }));
 
 const pageMap = {
@@ -52,6 +52,9 @@ app.use((err, req, res, next) => {
   console.error(err);
   res.status(err.status || 500).json({ error: err.message || '서버 오류' });
 });
+
+// Ensure schema is up-to-date before accepting traffic
+await ensureSchema();
 
 app.listen(PORT, () => {
   console.log(`\n가족 블로그 서버 실행 중 (${isProd ? 'production' : 'development'}): http://localhost:${PORT}\n`);

@@ -57,7 +57,7 @@
   </main>
 
   <script type="module">
-    import { api, me, renderNav, renderFooter, escapeHtml, toast } from '/js/common.js';
+    import { api, me, renderNav, renderFooter, escapeHtml, toast, imgUrl } from '/js/common.js';
 
     const user = await me();
     if (!user) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); throw 0; }
@@ -86,7 +86,7 @@
         titleEl.value = post.title;
         contentEl.value = post.content || '';
         catEl.value = post.category || '일상';
-        images = (post.images || []).map(i => ({ filename: i.filename, caption: i.caption || '', url: '/uploads/' + i.filename }));
+        images = (post.images || []).map(i => ({ filename: i.filename, caption: i.caption || '', url: imgUrl(i.filename) }));
         if (post.cover_image) {
           const idx = images.findIndex(i => i.filename === post.cover_image);
           coverIndex = idx >= 0 ? idx : 0;
