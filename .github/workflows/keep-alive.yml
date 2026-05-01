@@ -18,26 +18,34 @@ on:
   workflow_dispatch:    # 수동 실행 가능
 
 jobs:
-  # 1. Render 앱 깨우기 (family-blog 전용, 부수적으로 family-blog Supabase도 깨워짐)
+  # 1. Render 앱 깨우기 (각 앱 슬립 방지). matrix로 여러 앱 병렬 핑.
   ping-render:
-    name: Ping Render app (family-blog)
+    name: Ping Render ${{ matrix.app.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        app:
+          - name: family-blog
+            url: https://family-blog-h01n.onrender.com/api/posts?limit=1
+          - name: con-mgt
+            url: https://con-mgt-7if2.onrender.com/healthz
     steps:
-      - name: GET /api/posts (DB query 발생)
+      - name: Wake & ping ${{ matrix.app.name }}
         run: |
           for i in 1 2 3; do
-            response=$(curl -sS -m 90 -o /tmp/body.json -w "%{http_code} · %{time_total}s" \
-              "https://family-blog-h01n.onrender.com/api/posts?limit=1")
+            response=$(curl -sS -m 90 -o /dev/null -w "%{http_code} · %{time_total}s" \
+              "${{ matrix.app.url }}")
             echo "  attempt $i: $response"
             code="${response%% *}"
             if [ "$code" = "200" ]; then
-              echo "  ✓ family-blog Render + Postgres OK"
+              echo "  ✓ ${{ matrix.app.name }} Render OK"
               exit 0
             fi
             sleep 5
           done
-          echo "::warning::family-blog Render unreachable after 3 retries (Render may be down, but Supabase REST 핑이 별도로 시도됩니다)"
+          echo "::warning::${{ matrix.app.name }} Render unreachable after 3 retries (Supabase RPC 핑이 별도로 시도됩니다)"
 
   # 2. 각 Supabase 프로젝트에 직접 REST 핑 (옵션 — 부가 안전망)
   #    이 job이 실패해도 워크플로우 전체는 ✅로 처리됨 (continue-on-error).
