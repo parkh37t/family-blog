@@ -12,9 +12,7 @@
 
   <div class="hero-shell">
     <section class="hero">
-      <span class="hero-kicker">family journal</span>
-      <h1>오늘도, 함께한 순간</h1>
-      <p>작은 하루하루가 쌓여 우리가 됩니다.<br>서로의 이야기를 나누고, 사진으로 기억을 남겨요.</p>
+      <h1>추억은 순간이지만, 사랑은 영원하다</h1>
     </section>
   </div>
 
@@ -33,7 +31,7 @@
   <button id="fab" class="fab hide" title="글쓰기" aria-label="글쓰기">＋</button>
 
   <script type="module">
-    import { api, me, renderNav, renderFooter, formatDate, escapeHtml, initialOf, toast, imgUrl } from '/js/common.js';
+    import { api, me, renderNav, renderFooter, formatDate, formatDateShort, escapeHtml, initialOf, toast, imgUrl } from '/js/common.js';
 
     const user = await me();
     renderNav('home', user);
@@ -69,21 +67,15 @@
       const imgs = p.images || [];
       const cover = p.cover_image || imgs[0]?.filename;
       const src = cover ? escapeHtml(imgUrl(cover)) : null;
-      const excerpt = (p.content || '').replace(/\s+/g, ' ').slice(0, 120);
       return `
         <article class="feed-card" onclick="location.href='/post/${p.id}'">
           ${src
-            ? `<div class="feed-card-media"><img src="${src}" alt="" loading="lazy"><div class="feed-card-badge">${escapeHtml(p.category || '일상')}</div></div>`
-            : `<div class="feed-card-media placeholder">${escapeHtml((p.title || 'A').charAt(0))}<div class="feed-card-badge">${escapeHtml(p.category || '일상')}</div></div>`}
+            ? `<div class="feed-card-media"><img src="${src}" alt="" loading="lazy"></div>`
+            : `<div class="feed-card-media placeholder">${escapeHtml((p.title || 'A').charAt(0))}</div>`}
           <div class="feed-card-body">
             <h3 class="feed-card-title">${escapeHtml(p.title)}</h3>
-            ${excerpt ? `<p class="feed-card-excerpt">${escapeHtml(excerpt)}</p>` : ''}
             <div class="feed-card-meta">
-              <span class="avatar">${p.user_avatar ? `<img src="${escapeHtml(p.user_avatar)}" alt="">` : escapeHtml(initialOf(p.display_name))}</span>
-              <span>${escapeHtml(p.display_name)}</span>
-              <span class="dot"></span>
-              <span>${formatDate(p.created_at)}</span>
-              ${p.comment_count ? `<span class="dot"></span><span>댓글 ${p.comment_count}</span>` : ''}
+              <span>${formatDateShort(p.created_at)}</span>
             </div>
           </div>
         </article>`;

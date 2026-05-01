@@ -47,6 +47,15 @@ export function formatDateTime(iso) {
   return d.toLocaleString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+/** YYYY.MM.DD format (clubschool style) */
+export function formatDateShort(iso) {
+  const d = new Date(iso.includes('Z') ? iso : iso + 'Z');
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}.${m}.${day}`;
+}
+
 /**
  * Returns a displayable URL for a stored image reference.
  * - If it's already an absolute URL (http/https), return as-is.
@@ -141,8 +150,8 @@ export function renderFooter() {
     document.body.appendChild(foot);
   }
   foot.innerHTML = `
-    <div class="serif">추억은 순간이지만, 사랑은 영원하다</div>
-    <div style="margin-top:8px">© ${new Date().getFullYear()} 우리 가족 블로그</div>
+    <a href="#top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;" class="back-top" aria-label="맨 위로">↑</a>
+    <div class="foot-copy">© ${new Date().getFullYear()} clubschool · family journal</div>
   `;
 }
 
