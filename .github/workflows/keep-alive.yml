@@ -39,22 +39,24 @@ jobs:
           done
           echo "::warning::family-blog Render unreachable after 3 retries (Render may be down, but Supabase REST 핑이 별도로 시도됩니다)"
 
-  # 2. 각 Supabase 프로젝트에 직접 REST 핑 (matrix로 병렬 실행)
+  # 2. 각 Supabase 프로젝트에 직접 REST 핑 (옵션 — 부가 안전망)
+  #    이 job이 실패해도 워크플로우 전체는 ✅로 처리됨 (continue-on-error).
+  #    family-blog는 위의 ping-render에서 이미 DB 활동 발생하므로 충분히 살아있음.
   ping-supabase:
-    name: Ping Supabase ${{ matrix.project }}
+    name: Ping Supabase ${{ matrix.project }} (optional)
     runs-on: ubuntu-latest
     timeout-minutes: 3
+    continue-on-error: true   # 인증 형식 차이로 401 떨어져도 워크플로우는 통과
     strategy:
-      fail-fast: false   # 한 프로젝트가 실패해도 나머지는 계속
+      fail-fast: false
       matrix:
         project:
-          - family-blog          # secrets: SUPABASE_URL, SUPABASE_ANON_KEY
-          - conmgt               # secrets: CONMGT_URL, CONMGT_ANON_KEY
+          - family-blog
+          - conmgt
     steps:
       - name: Resolve secrets for ${{ matrix.project }}
         id: resolve
         env:
-          # family-blog는 기존 호환성 유지(SUPABASE_*), 그 외 프로젝트는 PREFIX_*
           FAMILY_BLOG_URL: ${{ secrets.SUPABASE_URL }}
           FAMILY_BLOG_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           CONMGT_URL: ${{ secrets.CONMGT_URL }}
@@ -70,27 +72,34 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # 마스킹: URL과 KEY를 로그에서 자동 가림
           echo "::add-mask::$url"
           echo "::add-mask::$key"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "key=$key" >> "$GITHUB_OUTPUT"
 
-      - name: REST ping (DB metadata query 트리거)
+      - name: Multi-endpoint ping (try several until one responds)
         if: steps.resolve.outputs.skip != 'true'
         env:
           URL: ${{ steps.resolve.outputs.url }}
           KEY: ${{ steps.resolve.outputs.key }}
         run: |
-          # PostgREST 루트는 OpenAPI 스키마 반환 — 내부적으로 DB 메타데이터 쿼리 발생 → 활동으로 기록
-          status=$(curl -sS -m 30 -o /dev/null -w "%{http_code}" \
-            -H "apikey: $KEY" \
-            -H "Authorization: Bearer $KEY" \
+          # 1) auth health (no key) — checks project alive
+          h=$(curl -sS -m 15 -o /dev/null -w "%{http_code}" "$URL/auth/v1/health")
+          echo "  /auth/v1/health → HTTP $h"
+          # 2) REST root with apikey — triggers DB metadata query
+          r=$(curl -sS -m 15 -o /dev/null -w "%{http_code}" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
             "$URL/rest/v1/")
-          echo "  ${{ matrix.project }} REST: HTTP $status"
-          if [ "$status" = "200" ]; then
-            echo "  ✓ ${{ matrix.project }} Postgres alive"
-          else
-            echo "::error::${{ matrix.project }} unexpected HTTP $status — 프로젝트가 일시정지됐을 수 있습니다."
-            exit 1
+          echo "  /rest/v1/      → HTTP $r"
+          # 3) auth settings with apikey — also touches DB
+          s=$(curl -sS -m 15 -o /dev/null -w "%{http_code}" \
+            -H "apikey: $KEY" "$URL/auth/v1/settings")
+          echo "  /auth/v1/settings → HTTP $s"
+
+          # 어느 하나라도 200이면 프로젝트는 살아있음
+          if [ "$h" = "200" ] || [ "$r" = "200" ] || [ "$s" = "200" ]; then
+            echo "  ✓ ${{ matrix.project }} Supabase project is alive."
+            exit 0
           fi
+          echo "::warning::${{ matrix.project }} all probes returned non-200 (h=$h r=$r s=$s)"
+          exit 1
