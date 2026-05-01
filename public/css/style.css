@@ -42,7 +42,7 @@
   --shadow-lg: 0 10px 24px rgba(31, 28, 24, 0.08), 0 24px 56px rgba(31, 28, 24, 0.14);
 
   /* layout */
-  --container: 1180px;
+  --container: 1280px;
   --header-h: 60px;
   --nav-h: 64px;
 }
@@ -311,16 +311,17 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .chip-count { display: none; }   /* 카운트 숨김 */
 
 /* ============ GRID + CARDS — clubschool 포트폴리오 스타일 ============ */
+/* 데스크톱은 3열 고정 (clubschool과 동일). 4열로 쪼개지지 않음. */
 .feed {
   display: grid;
-  gap: 56px 28px;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 56px 24px;
+  grid-template-columns: 1fr;
 }
-@media (min-width: 900px) {
-  .feed { gap: 80px 40px; grid-template-columns: repeat(3, 1fr); }
+@media (min-width: 720px) {
+  .feed { gap: 72px 32px; grid-template-columns: repeat(2, 1fr); }
 }
-@media (min-width: 1280px) {
-  .feed { grid-template-columns: repeat(4, 1fr); }
+@media (min-width: 1080px) {
+  .feed { gap: 88px 40px; grid-template-columns: repeat(3, 1fr); }
 }
 
 .feed-card {
@@ -344,7 +345,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
   background: var(--bg-muted);
   position: relative;
   overflow: hidden;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   border-radius: 0;
 }
 .feed-card-media img {
@@ -369,9 +370,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
   gap: 4px;
 }
 .feed-card-title {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.01em;
   line-height: 1.4;
   color: var(--ink);
   display: -webkit-box;
@@ -384,7 +385,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 
 .feed-card-meta {
   display: flex; align-items: center; gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ink-muted);
   letter-spacing: 0.02em;
 }
