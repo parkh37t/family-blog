@@ -29,8 +29,6 @@ app.use('/api/posts', postsRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/uploads', uploadsRoutes);
 
-app.get('/healthz', (req, res) => res.json({ ok: true, env: isProd ? 'production' : 'development' }));
-
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'], maxAge: isProd ? '1h' : '0' }));
 
 const pageMap = {
@@ -53,9 +51,33 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message || '서버 오류' });
 });
 
-// Ensure schema is up-to-date before accepting traffic
-await ensureSchema();
+// Try to ensure schema, but don't crash if DB is temporarily unreachable
+// (e.g. Supabase free tier paused). Server still serves static pages and
+// API routes that touch the DB will return 503 until DB recovers.
+let dbReady = false;
+async function tryEnsureSchema(retries = 0) {
+  try {
+    await ensureSchema();
+    dbReady = true;
+    if (retries > 0) console.log('[db] reconnected after retries.');
+  } catch (e) {
+    dbReady = false;
+    console.error(`[db] schema check failed (attempt ${retries + 1}): ${e.message}`);
+    // exponential backoff retry up to ~5 minutes
+    const delay = Math.min(60_000, 2_000 * Math.pow(2, retries));
+    setTimeout(() => tryEnsureSchema(retries + 1), delay);
+  }
+}
+tryEnsureSchema();
+
+// Update healthz to report DB readiness
+app.get('/healthz', (req, res) => res.json({
+  ok: true,
+  env: isProd ? 'production' : 'development',
+  db: dbReady ? 'ready' : 'unavailable',
+}));
 
 app.listen(PORT, () => {
-  console.log(`\n가족 블로그 서버 실행 중 (${isProd ? 'production' : 'development'}): http://localhost:${PORT}\n`);
+  console.log(`\n가족 블로그 서버 실행 중 (${isProd ? 'production' : 'development'}): http://localhost:${PORT}`);
+  console.log(`  DB 상태: ${dbReady ? '연결됨' : '연결 시도 중...'}\n`);
 });

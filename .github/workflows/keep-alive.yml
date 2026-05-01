@@ -1,0 +1,54 @@
+name: Keep Supabase & Render Alive
+
+# Supabase 무료 플랜은 7일간 활동이 없으면 자동 일시정지됩니다.
+# 이 워크플로우는 매일 2회 우리 앱의 /api/posts 엔드포인트를 호출해서
+# Render 서버를 깨우고 그 결과로 Supabase Postgres에 쿼리가 발생 → 활동으로 인식됨.
+# 추가로 Supabase REST API에도 직접 핑을 보내 Render 장애 시에도 보장.
+
+on:
+  schedule:
+    # UTC 기준. 02:00 UTC = 11:00 KST, 14:00 UTC = 23:00 KST → 한국 시간 오전/저녁 1회씩
+    - cron: '0 2,14 * * *'
+  workflow_dispatch:    # 탭에서 수동 실행 가능
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wake Render & query Supabase via app API
+        run: |
+          echo "🌐 [1/2] Pinging Render app /api/posts..."
+          # Render 무료 슬립 시 첫 응답이 30~60s 걸릴 수 있어 -m 90s
+          for i in 1 2 3; do
+            response=$(curl -sS -m 90 -o /tmp/body.json -w "%{http_code} · %{time_total}s" \
+              "https://family-blog-h01n.onrender.com/api/posts?limit=1")
+            echo "  attempt $i: $response"
+            code="${response%% *}"
+            if [ "$code" = "200" ]; then
+              echo "  ✓ DB query OK · $(head -c 80 /tmp/body.json)..."
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Direct Supabase REST ping (failsafe)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        # secrets가 설정된 경우에만 실행. 없으면 위의 app API ping만으로도 충분.
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_ANON_KEY != '' }}
+        run: |
+          echo "🌐 [2/2] Direct Supabase REST ping..."
+          status=$(curl -sS -m 30 -o /dev/null -w "%{http_code}" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/")
+          echo "  REST root: HTTP $status"
+          # 200 또는 401(권한 없지만 살아있음) 모두 "alive" 신호
+          if [ "$status" = "200" ] || [ "$status" = "401" ]; then
+            echo "  ✓ Supabase project is awake."
+          else
+            echo "  ⚠ Unexpected status — Supabase may be paused."
+            exit 1
+          fi

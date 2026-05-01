@@ -5,7 +5,9 @@ services:
     plan: free
     region: singapore
     buildCommand: npm ci
-    startCommand: node seed.js && node server.js
+    # 서버 시작 시 자동으로 ensureSchema/재시도하므로 seed.js를 별도로 실행하지 않음.
+    # 첫 데이터 시드는 로컬에서 `npm run setup` 한 번 실행하면 끝.
+    startCommand: node server.js
     healthCheckPath: /healthz
     envVars:
       - key: NODE_ENV
