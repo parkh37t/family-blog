@@ -77,29 +77,47 @@ jobs:
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "key=$key" >> "$GITHUB_OUTPUT"
 
-      - name: Multi-endpoint ping (try several until one responds)
+      - name: DB heartbeat (RPC) with fallback probes
         if: steps.resolve.outputs.skip != 'true'
         env:
           URL: ${{ steps.resolve.outputs.url }}
           KEY: ${{ steps.resolve.outputs.key }}
         run: |
-          # 1) auth health (no key) — checks project alive
-          h=$(curl -sS -m 15 -o /dev/null -w "%{http_code}" "$URL/auth/v1/health")
-          echo "  /auth/v1/health → HTTP $h"
-          # 2) REST root with apikey — triggers DB metadata query
-          r=$(curl -sS -m 15 -o /dev/null -w "%{http_code}" \
+          # 1) heartbeat RPC — anon 권한 부여된 SQL 함수 호출 (DB 쿼리 직접 발생)
+          #    아래 SQL을 각 프로젝트의 SQL Editor에서 한 번 실행해 두면 활성화됨:
+          #
+          #      create or replace function public.heartbeat()
+          #      returns text language sql as $$ select 'pong' $$;
+          #      grant execute on function public.heartbeat() to anon;
+          #
+          rpc=$(curl -sS -m 15 -o /tmp/rpc.body -w "%{http_code}" \
+            -X POST "$URL/rest/v1/rpc/heartbeat" \
             -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
-            "$URL/rest/v1/")
-          echo "  /rest/v1/      → HTTP $r"
-          # 3) auth settings with apikey — also touches DB
-          s=$(curl -sS -m 15 -o /dev/null -w "%{http_code}" \
-            -H "apikey: $KEY" "$URL/auth/v1/settings")
-          echo "  /auth/v1/settings → HTTP $s"
-
-          # 어느 하나라도 200이면 프로젝트는 살아있음
-          if [ "$h" = "200" ] || [ "$r" = "200" ] || [ "$s" = "200" ]; then
-            echo "  ✓ ${{ matrix.project }} Supabase project is alive."
+            -H "Content-Type: application/json" -d '{}')
+          echo "  POST /rest/v1/rpc/heartbeat → HTTP $rpc · body: $(cat /tmp/rpc.body)"
+          if [ "$rpc" = "200" ]; then
+            echo "  ✓ heartbeat RPC OK"
             exit 0
           fi
-          echo "::warning::${{ matrix.project }} all probes returned non-200 (h=$h r=$r s=$s)"
+
+          # 2) Fallback: REST root
+          rest=$(curl -sS -m 15 -o /dev/null -w "%{http_code}" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" "$URL/rest/v1/")
+          echo "  GET /rest/v1/ → HTTP $rest"
+          if [ "$rest" = "200" ]; then
+            echo "  ✓ Project alive (REST root)"
+            exit 0
+          fi
+
+          # 3) Fallback: auth settings
+          auth=$(curl -sS -m 15 -o /dev/null -w "%{http_code}" \
+            -H "apikey: $KEY" "$URL/auth/v1/settings")
+          echo "  GET /auth/v1/settings → HTTP $auth"
+          if [ "$auth" = "200" ]; then
+            echo "  ✓ Project alive (auth settings)"
+            exit 0
+          fi
+
+          echo "::warning::all probes failed (rpc=$rpc rest=$rest auth=$auth)"
+          echo "💡 Tip: SQL Editor 에서 heartbeat() 함수를 생성하면 RPC 핑이 작동합니다"
           exit 1
