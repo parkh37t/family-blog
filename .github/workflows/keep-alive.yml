@@ -1,54 +1,96 @@
 name: Keep Supabase & Render Alive
 
 # Supabase 무료 플랜은 7일간 활동이 없으면 자동 일시정지됩니다.
-# 이 워크플로우는 매일 2회 우리 앱의 /api/posts 엔드포인트를 호출해서
-# Render 서버를 깨우고 그 결과로 Supabase Postgres에 쿼리가 발생 → 활동으로 인식됨.
-# 추가로 Supabase REST API에도 직접 핑을 보내 Render 장애 시에도 보장.
+# 이 워크플로우는 매일 2회 실행되어:
+#  1) Render 앱(/api/posts)을 깨워 family-blog Postgres에 활동을 발생시키고,
+#  2) 등록된 모든 Supabase 프로젝트의 REST API에 직접 핑을 보내 활동 기록을 남깁니다.
+#
+# 새 프로젝트 추가 방법:
+#   GitHub → Settings → Secrets → 아래와 같은 페어를 등록하면 자동으로 핑됨
+#     <PREFIX>_URL        예: CONMGT_URL = https://xxxx.supabase.co
+#     <PREFIX>_ANON_KEY   예: CONMGT_ANON_KEY = eyJhbGc...
+#   그리고 본 파일의 matrix에 PREFIX 추가.
 
 on:
   schedule:
-    # UTC 기준. 02:00 UTC = 11:00 KST, 14:00 UTC = 23:00 KST → 한국 시간 오전/저녁 1회씩
+    # UTC 기준. 02:00 UTC = 11:00 KST, 14:00 UTC = 23:00 KST
     - cron: '0 2,14 * * *'
-  workflow_dispatch:    # 탭에서 수동 실행 가능
+  workflow_dispatch:    # 수동 실행 가능
 
 jobs:
-  ping:
+  # 1. Render 앱 깨우기 (family-blog 전용, 부수적으로 family-blog Supabase도 깨워짐)
+  ping-render:
+    name: Ping Render app (family-blog)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Wake Render & query Supabase via app API
+      - name: GET /api/posts (DB query 발생)
         run: |
-          echo "🌐 [1/2] Pinging Render app /api/posts..."
-          # Render 무료 슬립 시 첫 응답이 30~60s 걸릴 수 있어 -m 90s
           for i in 1 2 3; do
             response=$(curl -sS -m 90 -o /tmp/body.json -w "%{http_code} · %{time_total}s" \
               "https://family-blog-h01n.onrender.com/api/posts?limit=1")
             echo "  attempt $i: $response"
             code="${response%% *}"
             if [ "$code" = "200" ]; then
-              echo "  ✓ DB query OK · $(head -c 80 /tmp/body.json)..."
-              break
+              echo "  ✓ family-blog Render + Postgres OK"
+              exit 0
             fi
             sleep 5
           done
+          echo "::warning::family-blog Render unreachable after 3 retries (Render may be down, but Supabase REST 핑이 별도로 시도됩니다)"
 
-      - name: Direct Supabase REST ping (failsafe)
+  # 2. 각 Supabase 프로젝트에 직접 REST 핑 (matrix로 병렬 실행)
+  ping-supabase:
+    name: Ping Supabase ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    strategy:
+      fail-fast: false   # 한 프로젝트가 실패해도 나머지는 계속
+      matrix:
+        project:
+          - family-blog          # secrets: SUPABASE_URL, SUPABASE_ANON_KEY
+          - conmgt               # secrets: CONMGT_URL, CONMGT_ANON_KEY
+    steps:
+      - name: Resolve secrets for ${{ matrix.project }}
+        id: resolve
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        # secrets가 설정된 경우에만 실행. 없으면 위의 app API ping만으로도 충분.
-        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_ANON_KEY != '' }}
+          # family-blog는 기존 호환성 유지(SUPABASE_*), 그 외 프로젝트는 PREFIX_*
+          FAMILY_BLOG_URL: ${{ secrets.SUPABASE_URL }}
+          FAMILY_BLOG_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          CONMGT_URL: ${{ secrets.CONMGT_URL }}
+          CONMGT_KEY: ${{ secrets.CONMGT_ANON_KEY }}
         run: |
-          echo "🌐 [2/2] Direct Supabase REST ping..."
+          case "${{ matrix.project }}" in
+            family-blog)  url="$FAMILY_BLOG_URL"; key="$FAMILY_BLOG_KEY" ;;
+            conmgt)       url="$CONMGT_URL";      key="$CONMGT_KEY" ;;
+            *)            echo "unknown project"; exit 1 ;;
+          esac
+          if [ -z "$url" ] || [ -z "$key" ]; then
+            echo "::warning::secrets not set for ${{ matrix.project }} — skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # 마스킹: URL과 KEY를 로그에서 자동 가림
+          echo "::add-mask::$url"
+          echo "::add-mask::$key"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: REST ping (DB metadata query 트리거)
+        if: steps.resolve.outputs.skip != 'true'
+        env:
+          URL: ${{ steps.resolve.outputs.url }}
+          KEY: ${{ steps.resolve.outputs.key }}
+        run: |
+          # PostgREST 루트는 OpenAPI 스키마 반환 — 내부적으로 DB 메타데이터 쿼리 발생 → 활동으로 기록
           status=$(curl -sS -m 30 -o /dev/null -w "%{http_code}" \
-            -H "apikey: $SUPABASE_ANON_KEY" \
-            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
-            "$SUPABASE_URL/rest/v1/")
-          echo "  REST root: HTTP $status"
-          # 200 또는 401(권한 없지만 살아있음) 모두 "alive" 신호
-          if [ "$status" = "200" ] || [ "$status" = "401" ]; then
-            echo "  ✓ Supabase project is awake."
+            -H "apikey: $KEY" \
+            -H "Authorization: Bearer $KEY" \
+            "$URL/rest/v1/")
+          echo "  ${{ matrix.project }} REST: HTTP $status"
+          if [ "$status" = "200" ]; then
+            echo "  ✓ ${{ matrix.project }} Postgres alive"
           else
-            echo "  ⚠ Unexpected status — Supabase may be paused."
+            echo "::error::${{ matrix.project }} unexpected HTTP $status — 프로젝트가 일시정지됐을 수 있습니다."
             exit 1
           fi
