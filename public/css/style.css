@@ -42,7 +42,7 @@
   --shadow-lg: 0 10px 24px rgba(31, 28, 24, 0.08), 0 24px 56px rgba(31, 28, 24, 0.14);
 
   /* layout */
-  --container: 1280px;
+  --container: 1440px;
   --header-h: 60px;
   --nav-h: 64px;
 }
@@ -341,11 +341,11 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 
 .feed-card-media {
-  aspect-ratio: 4/3;
+  aspect-ratio: 1/1;          /* 정사각형 */
   background: var(--bg-muted);
   position: relative;
   overflow: hidden;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   border-radius: 0;
 }
 .feed-card-media img {
@@ -358,7 +358,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
   display: grid; place-items: center;
   background: var(--bg-muted);
   color: var(--ink-muted);
-  font-size: 36px;
+  font-size: 56px;
   font-weight: 500;
   letter-spacing: -0.04em;
 }
@@ -370,9 +370,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
   gap: 4px;
 }
 .feed-card-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   line-height: 1.4;
   color: var(--ink);
   display: -webkit-box;
